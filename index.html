@@ -248,7 +248,10 @@
         <div id="sub-screen-iuran-warga" class="space-y-6">
           <div class="flex justify-between items-center"><div><h3 class="text-xs font-black text-slate-400 uppercase tracking-wider">Laporan Iuran Warga</h3><p class="text-[9px] text-slate-400 mt-1">Pencatatan pembayaran kas bulanan</p></div><button onclick="openFormIuran()" class="px-4 py-2.5 rounded-2xl bg-indigo-600 hover:bg-indigo-700 text-white text-[10px] font-bold shadow-lg shadow-indigo-500/20"><i class="fa-solid fa-plus"></i> Input Kas</button></div>
           <div class="bg-white rounded-[2rem] border border-slate-100 shadow-sm overflow-hidden">
-            <div class="p-4 border-b border-slate-100 bg-slate-50/50 flex justify-between items-center"><span class="text-[10px] font-bold text-slate-800">Status Iuran</span><input type="text" id="search-iuran-warga" onkeyup="filterTabelIuranWarga()" placeholder="Cari NIK/Nama..." class="px-3 py-1.5 border border-slate-200 rounded-xl text-[9px] w-36 focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white"></div>
+            <div class="p-4 border-b border-slate-100 bg-slate-50/50 flex justify-between items-center">
+              <span class="text-[10px] font-bold text-slate-800">Status Iuran</span>
+              <input type="text" id="search-iuran-warga" onkeyup="filterTabelIuranWarga()" placeholder="Cari NIK/Nama..." class="px-3 py-1.5 border border-slate-200 rounded-xl text-[9px] w-36 focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white">
+            </div>
             <div class="overflow-x-auto no-scrollbar"><table class="w-full text-left text-[10px] border-collapse min-w-[340px]"><thead><tr class="bg-slate-100/50 text-slate-400 font-bold border-b"><th class="p-3">Nama/NIK</th><th class="p-3 text-center">Bulan</th><th class="p-3 text-center">Status</th><th class="p-3 text-center">Aksi</th></tr></thead><tbody id="tabel-status-iuran-tbody" class="divide-y divide-slate-100 font-bold text-slate-700"></tbody></table></div>
           </div>
         </div>
@@ -731,13 +734,18 @@
       const tbody = document.getElementById('tabel-status-iuran-tbody'); if (!tbody) return; tbody.innerHTML = '';
       const allWarga = getLocalTable('users').filter(x => x.role === 'Warga');
       
+      const searchInput = document.getElementById('search-iuran-warga');
       let wargaList;
+      
       if (currentUser.role === 'Warga') {
         wargaList = allWarga.filter(x => x.nik === currentUser.nik); 
+        if (searchInput) searchInput.classList.add('hidden'); // Sembunyikan pencarian untuk warga (Privasi)
       } else if (currentUser.role === 'Ketua RT') {
         wargaList = allWarga.filter(x => x.no_rt_rw === currentUser.no_rt_rw);
+        if (searchInput) searchInput.classList.remove('hidden');
       } else {
         wargaList = allWarga;
+        if (searchInput) searchInput.classList.remove('hidden');
       }
       
       const iuranList = getLocalTable('iuran_bulanan');
@@ -1017,6 +1025,127 @@
       html2pdf().from(document.getElementById('print-area-container')).set({ margin: 15, filename: `Surat_Pengantar.pdf`, image: { type: 'jpeg', quality: 0.98 }, html2canvas: { scale: 2, useCORS: true }, jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' } }).save().then(() => { 
         if(wasDark) document.documentElement.classList.add('dark-mode');
         showToast("Surat berhasil diunduh!"); closeSuratPreview(); 
+      });
+    }
+
+    function loadExistingLampidData() {
+      const bln = document.getElementById('fl-bulan').value;
+      const rt = document.getElementById('fl-rt').value;
+      const list = getLocalTable('rekap_lampid_bulanan');
+      const data = list.find(x => x.bulan === bln && x.rt === rt);
+      
+      const setVal = (id, val) => { const el = document.getElementById(id); if(el) el.value = val || 0; };
+      if(data) {
+          setVal('fl-awal-lk', data.awal_lk); setVal('fl-awal-pr', data.awal_pr);
+          setVal('fl-lahir-lk', data.lahir_lk); setVal('fl-lahir-pr', data.lahir_pr);
+          setVal('fl-mati-lk', data.mati_lk); setVal('fl-mati-pr', data.mati_pr);
+          setVal('fl-datang-lk', data.datang_lk); setVal('fl-datang-pr', data.datang_pr);
+          setVal('fl-pindah-lk', data.pindah_lk); setVal('fl-pindah-pr', data.pindah_pr);
+          setVal('fl-kk-tetap', data.kk_tetap); setVal('fl-kk-domisili', data.kk_domisili);
+      } else {
+          ['fl-awal-lk', 'fl-awal-pr', 'fl-lahir-lk', 'fl-lahir-pr', 'fl-mati-lk', 'fl-mati-pr', 'fl-datang-lk', 'fl-datang-pr', 'fl-pindah-lk', 'fl-pindah-pr', 'fl-kk-tetap', 'fl-kk-domisili'].forEach(id => setVal(id, 0));
+      }
+      liveCalculateLampid();
+    }
+
+    function openFormRekapLampid() {
+      const modalContent = document.getElementById('modal-form-content');
+      document.getElementById('modal-form-title').innerText = "Rekap Mutasi Penduduk";
+      const rtAsal = (currentUser.role === 'Ketua RT') ? currentUser.no_rt_rw.split(" / ")[0] : "RT 01";
+      modalContent.innerHTML = `
+        <form onsubmit="submitRekapLampidForm(event)" class="space-y-4 text-[10px] font-bold">
+          <div class="grid grid-cols-2 gap-3">
+            <div><label class="block text-slate-600 mb-1">Bulan</label><select id="fl-bulan" onchange="loadExistingLampidData()" class="w-full px-4 py-2 border rounded-xl bg-slate-50"><option value="Januari">Januari</option><option value="Februari">Februari</option><option value="Maret">Maret</option><option value="April">April</option><option value="Mei" selected>Mei</option><option value="Juni">Juni</option><option value="Juli">Juli</option><option value="Agustus">Agustus</option><option value="September">September</option><option value="Oktober">Oktober</option><option value="November">November</option><option value="Desember">Desember</option></select></div>
+            <div><label class="block text-slate-600 mb-1">RT Pelapor</label><input type="text" id="fl-rt" value="${rtAsal}" disabled class="w-full px-4 py-2 border rounded-xl bg-slate-100"></div>
+          </div>
+          <div class="bg-slate-100 p-2 rounded-xl border border-slate-200">
+              <p class="mb-2 text-center text-slate-600">Penduduk Awal Bulan</p>
+              <div class="grid grid-cols-2 gap-3">
+                <div><label class="block text-slate-500 mb-1 text-[9px]">Laki-laki</label><input type="number" id="fl-awal-lk" oninput="liveCalculateLampid()" class="w-full px-3 py-2 border rounded-xl" value="0"></div>
+                <div><label class="block text-slate-500 mb-1 text-[9px]">Perempuan</label><input type="number" id="fl-awal-pr" oninput="liveCalculateLampid()" class="w-full px-3 py-2 border rounded-xl" value="0"></div>
+              </div>
+          </div>
+          <div class="grid grid-cols-4 gap-2 text-[9px] text-center mb-3">
+              <div class="space-y-1"><p class="text-emerald-600 font-bold">Lahir</p><input type="number" id="fl-lahir-lk" oninput="liveCalculateLampid()" class="w-full p-2 border rounded-lg" placeholder="LK" value="0"><input type="number" id="fl-lahir-pr" oninput="liveCalculateLampid()" class="w-full p-2 border rounded-lg" placeholder="PR" value="0"></div>
+              <div class="space-y-1"><p class="text-rose-600 font-bold">Mati</p><input type="number" id="fl-mati-lk" oninput="liveCalculateLampid()" class="w-full p-2 border rounded-lg" placeholder="LK" value="0"><input type="number" id="fl-mati-pr" oninput="liveCalculateLampid()" class="w-full p-2 border rounded-lg" placeholder="PR" value="0"></div>
+              <div class="space-y-1"><p class="text-blue-600 font-bold">Datang</p><input type="number" id="fl-datang-lk" oninput="liveCalculateLampid()" class="w-full p-2 border rounded-lg" placeholder="LK" value="0"><input type="number" id="fl-datang-pr" oninput="liveCalculateLampid()" class="w-full p-2 border rounded-lg" placeholder="PR" value="0"></div>
+              <div class="space-y-1"><p class="text-amber-600 font-bold">Pindah</p><input type="number" id="fl-pindah-lk" oninput="liveCalculateLampid()" class="w-full p-2 border rounded-lg" placeholder="LK" value="0"><input type="number" id="fl-pindah-pr" oninput="liveCalculateLampid()" class="w-full p-2 border rounded-lg" placeholder="PR" value="0"></div>
+          </div>
+          <div class="grid grid-cols-2 gap-3 pt-2 border-t border-slate-200">
+            <div><label class="block text-slate-600 mb-1">KK Tetap</label><input type="number" id="fl-kk-tetap" oninput="liveCalculateLampid()" class="w-full px-4 py-2 border rounded-xl" value="0"></div>
+            <div><label class="block text-slate-600 mb-1">KK Domisili</label><input type="number" id="fl-kk-domisili" oninput="liveCalculateLampid()" class="w-full px-4 py-2 border rounded-xl" value="0"></div>
+          </div>
+          <div class="bg-indigo-50 border border-indigo-100 p-3 rounded-2xl flex justify-between text-[10px] font-bold text-indigo-700">
+            <div><p>Est. Penduduk Akhir</p><span id="helper-ak-jml" class="text-sm font-black">0 Jiwa</span></div>
+            <div class="text-right"><p>Est. Total KK</p><span id="helper-kk-jml" class="text-sm font-black">0 KK</span></div>
+          </div>
+          <button type="submit" class="w-full py-3.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-black uppercase transition-all shadow-lg shadow-indigo-500/20">Simpan Rekap Bulanan</button>
+        </form>
+      `;
+      document.getElementById('modal-form-box').classList.remove('hidden');
+      loadExistingLampidData();
+    }
+
+    function liveCalculateLampid() {
+      const helperAk = document.getElementById('helper-ak-jml'); const helperKk = document.getElementById('helper-kk-jml'); if (!helperAk || !helperKk) return;
+      const getSafeVal = (id) => { const el = document.getElementById(id); return el ? (parseInt(el.value, 10) || 0) : 0; };
+      const aw_lk = getSafeVal('fl-awal-lk'), aw_pr = getSafeVal('fl-awal-pr');
+      const lh_lk = getSafeVal('fl-lahir-lk'), lh_pr = getSafeVal('fl-lahir-pr');
+      const mt_lk = getSafeVal('fl-mati-lk'), mt_pr = getSafeVal('fl-mati-pr');
+      const dt_lk = getSafeVal('fl-datang-lk'), dt_pr = getSafeVal('fl-datang-pr');
+      const pd_lk = getSafeVal('fl-pindah-lk'), pd_pr = getSafeVal('fl-pindah-pr');
+      const kk_t = getSafeVal('fl-kk-tetap'), kk_d = getSafeVal('fl-kk-domisili');
+      
+      const ak_lk = aw_lk + lh_lk - mt_lk + dt_lk - pd_lk;
+      const ak_pr = aw_pr + lh_pr - mt_pr + dt_pr - pd_pr;
+      helperAk.innerText = `${ak_lk + ak_pr} Jiwa (L:${ak_lk} / P:${ak_pr})`; helperKk.innerText = `${kk_t + kk_d} KK`;
+    }
+
+    async function submitRekapLampidForm(e) {
+      e.preventDefault();
+      const getSafeVal = (id) => { const el = document.getElementById(id); return el ? (parseInt(el.value, 10) || 0) : 0; };
+      const bln = document.getElementById('fl-bulan').value, rt = document.getElementById('fl-rt').value;
+      
+      const aw_lk = getSafeVal('fl-awal-lk'), aw_pr = getSafeVal('fl-awal-pr');
+      const lh_lk = getSafeVal('fl-lahir-lk'), lh_pr = getSafeVal('fl-lahir-pr');
+      const mt_lk = getSafeVal('fl-mati-lk'), mt_pr = getSafeVal('fl-mati-pr');
+      const dt_lk = getSafeVal('fl-datang-lk'), dt_pr = getSafeVal('fl-datang-pr');
+      const pd_lk = getSafeVal('fl-pindah-lk'), pd_pr = getSafeVal('fl-pindah-pr');
+      const kk_t = getSafeVal('fl-kk-tetap'), kk_d = getSafeVal('fl-kk-domisili');
+      const ak_lk = aw_lk + lh_lk - mt_lk + dt_lk - pd_lk, ak_pr = aw_pr + lh_pr - mt_pr + dt_pr - pd_pr;
+
+      const list = getLocalTable('rekap_lampid_bulanan');
+      const newRekap = {
+        id_rekap_bln: "RLB" + Math.floor(Math.random() * 900 + 100), bulan: bln, rt: rt,
+        awal_lk: aw_lk, awal_pr: aw_pr, awal_jml: aw_lk + aw_pr, lahir_lk: lh_lk, lahir_pr: lh_pr, lahir_jml: lh_lk + lh_pr,
+        mati_lk: mt_lk, mati_pr: mt_pr, mati_jml: mt_lk + mt_pr, datang_lk: dt_lk, datang_pr: dt_pr, datang_jml: dt_lk + dt_pr,
+        pindah_lk: pd_lk, pindah_pr: pd_pr, pindah_jml: pd_lk + pd_pr, akhir_lk: ak_lk, akhir_pr: ak_pr, akhir_jml: ak_lk + ak_pr,
+        kk_tetap: kk_t, kk_domisili: kk_d, jml_kk: kk_t + kk_d
+      };
+
+      const idx = list.findIndex(x => x.bulan === bln && x.rt === rt);
+      if (idx !== -1) list[idx] = newRekap; else list.push(newRekap);
+      saveLocalTable('rekap_lampid_bulanan', list); await sendToCloud('saveRekapLampidBulanan', newRekap);
+      showToast("Arsip bulanan berhasil disimpan!", "success"); closeFormModal(); renderLampidList();
+    }
+
+    function renderLampidList() {
+      const tbody = document.getElementById('lampid-bulanan-tbody'); if (!tbody) return; tbody.innerHTML = '';
+      const list = getLocalTable('rekap_lampid_bulanan'); const filtered = (currentUser.role === 'Ketua RT') ? list.filter(x => x.rt === currentUser.no_rt_rw.split(" / ")[0]) : list;
+      filtered.forEach(x => {
+        tbody.innerHTML += `
+          <tr class="hover:bg-slate-50 transition-all">
+            <td class="p-2.5 sticky-col sticky-left-0 bg-white border-r border-slate-200 font-extrabold text-indigo-600">${x.bulan}</td>
+            <td class="p-2.5 sticky-col sticky-left-14 bg-white border-r border-slate-200">${x.rt}</td>
+            <td class="p-1 border-r text-slate-500">${x.awal_lk}</td><td class="p-1 border-r text-slate-500">${x.awal_pr}</td><td class="p-1 border-r bg-indigo-50/20 text-indigo-700 font-black">${x.awal_jml}</td>
+            <td class="p-1 border-r text-emerald-600">${x.lahir_lk}</td><td class="p-1 border-r text-emerald-600">${x.lahir_pr}</td><td class="p-1 border-r bg-emerald-50/20 text-emerald-700 font-black">${x.lahir_jml}</td>
+            <td class="p-1 border-r text-rose-600">${x.mati_lk}</td><td class="p-1 border-r text-rose-600">${x.mati_pr}</td><td class="p-1 border-r bg-rose-50/20 text-rose-700 font-black">${x.mati_jml}</td>
+            <td class="p-1 border-r text-blue-600">${x.datang_lk}</td><td class="p-1 border-r text-blue-600">${x.datang_pr}</td><td class="p-1 border-r bg-blue-50/20 text-blue-700 font-black">${x.datang_jml}</td>
+            <td class="p-1 border-r text-amber-600">${x.pindah_lk}</td><td class="p-1 border-r text-amber-600">${x.pindah_pr}</td><td class="p-1 border-r bg-amber-50/20 text-amber-700 font-black">${x.pindah_jml}</td>
+            <td class="p-1 border-r bg-slate-50 text-slate-800">${x.akhir_lk}</td><td class="p-1 border-r bg-slate-50 text-slate-800">${x.akhir_pr}</td><td class="p-1 border-r bg-indigo-100 text-indigo-900 font-black">${x.akhir_jml}</td>
+            <td class="p-1 border-r text-slate-500">${x.kk_tetap}</td><td class="p-1 border-r text-slate-500">${x.kk_domisili}</td><td class="p-1 bg-amber-50 text-amber-800 font-black">${x.jml_kk}</td>
+          </tr>
+        `;
       });
     }
 
